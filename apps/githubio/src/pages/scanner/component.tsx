@@ -1,38 +1,69 @@
 import React from "react";
-import { concatMap, from, interval, last, map, takeWhile } from "rxjs";
+import {
+  concatMap,
+  distinctUntilChanged,
+  from,
+  interval,
+  map,
+  of,
+  Subject,
+  switchMap,
+  takeWhile,
+  tap,
+} from "rxjs";
+import { fromFetch } from "rxjs/fetch";
 
-const scanner$ = interval(1000 * 10);
+const scanner$ = interval(1000 * 10).pipe(
+  map(() => Date.now().toString()),
+  distinctUntilChanged(),
+);
+const hmisReady = (barcode: string) => {
+  const url = new URL("http://localhost:5003/api/getData");
+  url.searchParams.set("param", barcode.toString());
+  url.searchParams.set("type", "csbts");
 
+  return fromFetch(url.href);
+};
+const plcActionReady = (data: unknown) => {
+  if (data) {
+    return of(null).pipe(
+      tap(() => {
+        console.log(data);
+      }),
+    );
+  }
+
+  return interval(1000).pipe(
+    map(() => Math.floor(Math.random() * 10)),
+    takeWhile((data) => data < 5),
+  );
+};
+const inputWindow$ = new Subject();
+const inputReady = (data: unknown) => {
+  return inputWindow$.pipe(
+    tap(() => {
+      console.log(data);
+    }),
+  );
+};
+void plcActionReady;
 const app$ = scanner$.pipe(
   concatMap((barcode) => {
-    const url = new URL("http://localhost:5003/api/getData");
-    url.searchParams.set("param", barcode.toString());
-    url.searchParams.set("type", "csbts");
-
-    return from(fetch(url)).pipe(
-      concatMap((res) => from(res.json())),
-      concatMap((data) => {
-        return interval(1000).pipe(
-          takeWhile((res) => res < 3),
-          last(),
-          map((plc) => ({ data, plc })),
-        );
-      }),
+    return hmisReady(barcode).pipe(
+      switchMap((r) => from(r.json())),
+      switchMap((data) => inputReady(data)),
     );
   }),
 );
 
 export const Component = () => {
-  const [list, setList] = React.useState<Array<{}>>([]);
+  const [list] = React.useState<Array<{}>>([]);
 
   React.useEffect(() => {
-    const s = app$.subscribe((value) => {
-      console.log("value", value);
-      setList((prev) => [...prev, value]);
-    });
+    const sub = app$.subscribe();
 
     return () => {
-      s.unsubscribe();
+      sub.unsubscribe();
     };
   }, []);
 
