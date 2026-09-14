@@ -49,6 +49,10 @@ export const createRoutes = (): RouteObject[] => {
                   path: "qrcode",
                   lazy: () => import("@/pages/qrcode/component"),
                 },
+                {
+                  path: "scanner",
+                  lazy: () => import("@/pages/scanner/component"),
+                },
               ],
               Component: DashLayout,
             },
